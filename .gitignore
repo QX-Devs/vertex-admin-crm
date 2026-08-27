@@ -25,9 +25,15 @@ yarn-error.log*
 # local env files
 .env*.local
 .env
+.env.production
 
-# vercel
+# Netlify & Vercel
+.netlify/
 .vercel
+
+# Scripts & temporary tools
+scripts/
+*.log
 
 # typescript
 *.tsbuildinfo

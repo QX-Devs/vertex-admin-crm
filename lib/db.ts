@@ -64,36 +64,16 @@ export function getPgPool(): Pool {
     return globalThis._pgPool;
   }
 
-  const connStr = process.env.DATABASE_URL;
   let poolConfig: any;
 
-  if (connStr) {
-    try {
-      const cleanUrl = connStr.split('?')[0];
-      const parsed = new URL(cleanUrl);
-      poolConfig = {
-        host: parsed.hostname,
-        port: parseInt(parsed.port || '5432', 10),
-        user: decodeURIComponent(parsed.username),
-        password: decodeURIComponent(parsed.password),
-        database: parsed.pathname.replace(/^\//, '') || 'postgres',
-        ssl: { rejectUnauthorized: false },
-        max: 20,
-        idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 10000,
-      };
-    } catch (e) {
-      console.warn('Failed to parse DATABASE_URL in admin CRM, falling back to discrete config:', e);
-    }
-  }
+  // 1. Prefer discrete variables because passwords with special characters won't break URL parser
+  const host = process.env.POSTGRES_HOST || process.env.host;
+  const user = process.env.POSTGRES_USER || process.env.user;
+  const password = process.env.POSTGRES_PASSWORD || process.env.password;
+  const database = process.env.POSTGRES_DB || process.env.database || 'postgres';
+  const port = Number(process.env.POSTGRES_PORT || process.env.port) || 6543;
 
-  if (!poolConfig) {
-    const host = process.env.POSTGRES_HOST || process.env.host || 'localhost';
-    const port = Number(process.env.POSTGRES_PORT || process.env.port) || 5432;
-    const user = process.env.POSTGRES_USER || process.env.user || 'postgres';
-    const password = process.env.POSTGRES_PASSWORD || process.env.password || '';
-    const database = process.env.POSTGRES_DB || process.env.database || 'postgres';
-
+  if (host && user && password) {
     poolConfig = {
       host,
       user,
@@ -105,6 +85,41 @@ export function getPgPool(): Pool {
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
     };
+  } else {
+    const connStr = process.env.DATABASE_URL;
+    if (connStr && (connStr.startsWith('postgres://') || connStr.startsWith('postgresql://'))) {
+      try {
+        const cleanUrl = connStr.split('?')[0];
+        const parsed = new URL(cleanUrl);
+        poolConfig = {
+          host: parsed.hostname,
+          port: parseInt(parsed.port || '5432', 10),
+          user: decodeURIComponent(parsed.username),
+          password: decodeURIComponent(parsed.password),
+          database: parsed.pathname.replace(/^\//, '') || 'postgres',
+          ssl: { rejectUnauthorized: false },
+          max: 20,
+          idleTimeoutMillis: 30000,
+          connectionTimeoutMillis: 10000,
+        };
+      } catch (e) {
+        console.warn('Failed to parse DATABASE_URL in admin CRM:', e);
+      }
+    }
+
+    if (!poolConfig) {
+      poolConfig = {
+        host: 'localhost',
+        user: 'postgres',
+        password: '',
+        database: 'postgres',
+        port: 5432,
+        ssl: { rejectUnauthorized: false },
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 10000,
+      };
+    }
   }
 
   const pool = new Pool(poolConfig);
