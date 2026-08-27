@@ -64,28 +64,50 @@ export function getPgPool(): Pool {
     return globalThis._pgPool;
   }
 
-  const host = process.env.POSTGRES_HOST || process.env.host || 'db.jgjlmpequqqcnberangs.supabase.co';
-  const port = Number(process.env.POSTGRES_PORT || process.env.port) || 5432;
-  const user = process.env.POSTGRES_USER || process.env.user || 'postgres';
-  const password = process.env.POSTGRES_PASSWORD || process.env.password || 'Lz/7WTs%PWhu?%+';
-  const database = process.env.POSTGRES_DB || process.env.database || 'postgres';
+  const connStr = process.env.DATABASE_URL;
+  let poolConfig: any;
 
-  const pool = new Pool({
-    host,
-    user,
-    password,
-    database,
-    port,
-    ssl: { rejectUnauthorized: false },
-    max: 20,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000,
-    // Strictly force IPv4 resolution in Docker
-    lookup: (hostname: string, options: any, callback: any) => {
-      const cb = typeof options === 'function' ? options : callback;
-      dns.lookup(hostname, { family: 4 }, cb);
+  if (connStr) {
+    try {
+      const cleanUrl = connStr.split('?')[0];
+      const parsed = new URL(cleanUrl);
+      poolConfig = {
+        host: parsed.hostname,
+        port: parseInt(parsed.port || '5432', 10),
+        user: decodeURIComponent(parsed.username),
+        password: decodeURIComponent(parsed.password),
+        database: parsed.pathname.replace(/^\//, '') || 'postgres',
+        ssl: { rejectUnauthorized: false },
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 10000,
+      };
+    } catch (e) {
+      console.warn('Failed to parse DATABASE_URL in admin CRM, falling back to discrete config:', e);
     }
-  } as any);
+  }
+
+  if (!poolConfig) {
+    const host = process.env.POSTGRES_HOST || process.env.host || 'localhost';
+    const port = Number(process.env.POSTGRES_PORT || process.env.port) || 5432;
+    const user = process.env.POSTGRES_USER || process.env.user || 'postgres';
+    const password = process.env.POSTGRES_PASSWORD || process.env.password || '';
+    const database = process.env.POSTGRES_DB || process.env.database || 'postgres';
+
+    poolConfig = {
+      host,
+      user,
+      password,
+      database,
+      port,
+      ssl: { rejectUnauthorized: false },
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+    };
+  }
+
+  const pool = new Pool(poolConfig);
 
   pool.on('error', (err) => {
     console.error('Unexpected error on idle Supabase client', err);
